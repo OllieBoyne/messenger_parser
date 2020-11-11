@@ -16,3 +16,11 @@ This script provides analysis on downloaded data from Facebook
 Run main.py, with the following options:
 
 - `--directory`: path to directory of conversation you would like to analyse
+    * For example,`facebook-<username>/messages/inbox/example_aaaaaaa`
+- `--outfile`: [optional] path to file to write output report to. Always printed to console
+- `--show_graph`: plot graph of messages over time
+- `--graph_freq`: sample width for graph (day, week or month) - default week
+
+example usage:
+
+`python main.py --directory <directory> --outfile out.txt --show_graph --graph_freq month`
