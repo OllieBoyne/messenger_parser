@@ -1,6 +1,8 @@
 # Facebook messenger parser
 
-This script provides analysis on downloaded data from Facebook
+This script provides analysis on downloaded data from Facebook.
+
+Once you request your chat history from Facebook, you can use this script to analyse a chat log, viewing who sends the most messages in a group chat, when messages have been sent over time, who has received/given the most reactions, and more!
 
 ## Getting the data
 
@@ -21,6 +23,6 @@ Run main.py, with the following options:
 - `--show_graph`: plot graph of messages over time
 - `--graph_freq`: sample width for graph (day, week or month) - default week
 
-example usage:
+Example usage:
 
 `python main.py --directory <directory> --export_dir outputs --show_graph --graph_freq month`
