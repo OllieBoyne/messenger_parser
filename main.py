@@ -19,7 +19,7 @@ from tabulate import tabulate
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--directory', type=str, help='Directory of files to look at', required=True)
-parser.add_argument('--out_file', type=str, help='File location to print report to')
+parser.add_argument('--output_dir', type=str, help='Directory to output logs to')
 
 parser.add_argument('--show_graph', action='store_true', help="Show plot of graph of messages over time")
 parser.add_argument('--graph_freq', type=str, choices=['day', 'week', 'month'], default='week',
@@ -90,6 +90,11 @@ class MessengerData:
         df.index.name = 'Name'
         self.streak_log = df
 
+    def save_all(self, output_dir):
+        """Save all logs to output dir"""
+        for log_type in ['message', 'react', 'streak']:
+            getattr(self, f'{log_type}_log').to_csv(os.path.join(output_dir, f'{log_type}s.csv'))
+
 
 def _parse_emoji(react_bytes):
     """Given in the format \\uxxxx\\uxxx..., convert to a singlr U+1... format"""
@@ -115,7 +120,7 @@ def _preparse(file):
     return out
 
 
-def get_data(files):
+def get_data(files: list) -> MessengerData:
     """Given list of json files, return dict of person : num messages sent"""
 
     messenger_data = MessengerData()
@@ -136,7 +141,7 @@ def get_data(files):
     return messenger_data
 
 
-def print_report(messenger_data, file=None):
+def print_report(messenger_data, loc=None):
     """Print messenger data, both to console, and file if provided"""
 
     report = ["------"]
@@ -170,8 +175,9 @@ def print_report(messenger_data, file=None):
 
     print(*report, sep="\n")
 
-    if file is not None:
-        print(*report, sep="\n", file=file)
+    if loc is not None:
+        with open(loc, 'w') as outfile:
+            print(*report, sep="\n", file=outfile)
 
 
 def plot_chat_volume(messenger_data, plot_by='week'):
@@ -199,11 +205,18 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # list of all valid message files
-    files = [os.path.join(args.directory, f) for f in os.listdir(args.directory) if f.endswith('.json')]
+    files = [os.path.join(args.directory, f) for f in os.listdir(args.directory) if f.endswith('.json')][-1:]
     sorted(files)  # make sure in alphabetical (reverse chronological) order
     messenger_data = get_data(files)
 
-    print_report(messenger_data)
+    output_dir = args.output_dir
+    if output_dir != '':
+        os.makedirs(output_dir, exist_ok=True)
+        messenger_data.save_all(output_dir)
+
+    print_report(messenger_data, loc=os.path.join(output_dir, 'log.txt') if output_dir!="" else None)
 
     if args.show_graph:
         plot_chat_volume(messenger_data, plot_by=args.graph_freq)
+
+
