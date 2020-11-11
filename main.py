@@ -168,7 +168,7 @@ def print_report(messenger_data, loc=None):
     reacts_by_sender = messenger_data.react_log.groupby('sender').size()  # by sender
     reacts_by_receiver = messenger_data.react_log.groupby('receiver').size().sort_values(ascending=False)  # by receiver
     report.append(
-        tabulate([[name, reacts_by_receiver[name], reacts_by_sender[name]] for name in reacts_by_receiver.index],
+        tabulate([[name, reacts_by_sender[name], reacts_by_receiver[name]] for name in reacts_by_receiver.index],
                  headers=['Name', 'Sent', 'Received'], tablefmt="github"))
 
 
@@ -186,7 +186,8 @@ def print_report(messenger_data, loc=None):
     report.append("Engagement - how many reacts per post")
     log_per_person['reacts_received'] = reacts_by_receiver[log_per_person.index]
     log_per_person['engagement'] = log_per_person.reacts_received / log_per_person.msgs_sent
-    report.append(tabulate([[name, log_per_person.engagement[name]] for name in msgs_per_person.index],
+    log_per_person = log_per_person.sort_values(by='engagement', ascending=False)
+    report.append(tabulate([[name, log_per_person.engagement[name]] for name in log_per_person.index],
                   headers=['Name', 'Reacts received per message sent'], tablefmt='github'))
 
     print(*report, sep="\n")
