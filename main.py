@@ -141,6 +141,10 @@ def get_data(files: list) -> MessengerData:
     return messenger_data
 
 
+def line_break(report):
+    report.append("\n------\n")
+
+
 def print_report(messenger_data, loc=None):
     """Print messenger data, both to console, and file if provided"""
 
@@ -155,8 +159,11 @@ def print_report(messenger_data, loc=None):
          msgs_per_person.index],
         headers=['Name', 'Messages', '% of total'], tablefmt="github"))
 
+    log_per_person = pd.DataFrame(dict(name=msgs_per_person.index, msgs_sent=msgs_per_person.values)) # create df here to start logging things together
+    log_per_person = log_per_person.set_index('name')
+
     # Reacts per person
-    report.append("------")
+    line_break(report)
     report.append("Reacts per person")
     reacts_by_sender = messenger_data.react_log.groupby('sender').size()  # by sender
     reacts_by_receiver = messenger_data.react_log.groupby('receiver').size().sort_values(ascending=False)  # by receiver
@@ -164,14 +171,23 @@ def print_report(messenger_data, loc=None):
         tabulate([[name, reacts_by_receiver[name], reacts_by_sender[name]] for name in reacts_by_receiver.index],
                  headers=['Name', 'Sent', 'Received'], tablefmt="github"))
 
+
     # Streaks per person
-    report.append("------")
+    line_break(report)
     report.append("Streaks of longest messages")
     sl = messenger_data.streak_log
     report.append(tabulate(
         [[name, sl.loc[name]['streak'], sl.loc[name]['start'], sl.loc[name]['end']] for name in
          sl['streak'].sort_values(ascending=False).index],
         headers=['Name', 'Streak', 'Start' 'End'], tablefmt='github'))
+
+    # Engagement - ratio of reacts received per message sent
+    line_break(report)
+    report.append("Engagement - how many reacts per post")
+    log_per_person['reacts_received'] = reacts_by_receiver[log_per_person.index]
+    log_per_person['engagement'] = log_per_person.reacts_received / log_per_person.msgs_sent
+    report.append(tabulate([[name, log_per_person.engagement[name]] for name in msgs_per_person.index],
+                  headers=['Name', 'Reacts received per message sent'], tablefmt='github'))
 
     print(*report, sep="\n")
 
@@ -182,8 +198,11 @@ def print_report(messenger_data, loc=None):
 
 def plot_chat_volume(messenger_data, plot_by='week'):
     """Plot the frequency of messages over time.
-    plot_by must be week or day"""
+    plot_by must be week, day, or month.
+    Produces a stacked figure"""
     msg_log = messenger_data.message_log
+    width = {'day': 1, 'week': 7, 'month': 30}
+
     if plot_by == 'day':
         count = msg_log.groupby([msg_log.index.date]).size()
         x = count.index
@@ -193,7 +212,6 @@ def plot_chat_volume(messenger_data, plot_by='week'):
     else:
         raise NotImplementedError(f"plot_by must be one of week, day, month - not '{plot_by}'")
 
-    width = {'day': 1, 'week': 7, 'month': 30}
     plt.bar(x, count.values, width=width[plot_by])
     plt.xlabel('Date')
     plt.ylabel(f'Messages per {plot_by}')
@@ -205,7 +223,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # list of all valid message files
-    files = [os.path.join(args.directory, f) for f in os.listdir(args.directory) if f.endswith('.json')][-1:]
+    files = [os.path.join(args.directory, f) for f in os.listdir(args.directory) if f.endswith('.json')]
     sorted(files)  # make sure in alphabetical (reverse chronological) order
     messenger_data = get_data(files)
 
