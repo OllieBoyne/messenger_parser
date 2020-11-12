@@ -5,21 +5,17 @@ import json
 import pandas as pd
 import emoji
 from tqdm import tqdm
-
 import argparse
-
 from matplotlib import pyplot as plt
 import matplotlib
-from time import perf_counter
-
-matplotlib.use('TkAgg')
-
+import numpy as np
 from tabulate import tabulate
+matplotlib.use('TkAgg')
 
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--directory', type=str, help='Directory of files to look at', required=True)
-parser.add_argument('--output_dir', type=str, help='Directory to output logs to')
+parser.add_argument('--output_dir', type=str, default='', help='Directory to output logs to')
 
 parser.add_argument('--show_graph', action='store_true', help="Show plot of graph of messages over time")
 parser.add_argument('--graph_freq', type=str, choices=['day', 'week', 'month'], default='week',
