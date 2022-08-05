@@ -141,7 +141,7 @@ def line_break(report):
     report.append("\n------\n")
 
 
-def print_report(messenger_data, loc=None):
+def print_report(messenger_data: MessengerData, loc=None):
     """Print messenger data, both to console, and file if provided"""
 
     report = ["------"]
@@ -167,6 +167,25 @@ def print_report(messenger_data, loc=None):
         tabulate([[name, reacts_by_sender[name], reacts_by_receiver[name]] for name in reacts_by_receiver.index],
                  headers=['Name', 'Sent', 'Received'], tablefmt="github"))
 
+    # Reacts per type
+    line_break(report)
+    react_headers = '😆😍❤👍👎'
+    report.append('Type of reacts given')
+    reacts_by_sender_type = messenger_data.react_log.groupby(['sender', 'emoji']).size()
+    report.append(
+        tabulate([[name, *[reacts_by_sender_type.get((name, e), 0) for e in react_headers]] for name in reacts_by_sender.index],
+                 headers=['Name', *react_headers], tablefmt="github")
+    )
+
+    line_break(report)
+    report.append('Type of reacts received')
+    reacts_by_receiver_type = messenger_data.react_log.groupby(['receiver', 'emoji']).size()
+    report.append(
+        tabulate([[name, *[reacts_by_receiver_type.get((name, e), 0) for e in react_headers]] for name in reacts_by_receiver.index],
+                 headers=['Name', *react_headers], tablefmt="github")
+    )
+
+
 
     # Streaks per person
     line_break(report)
@@ -178,6 +197,11 @@ def print_report(messenger_data, loc=None):
         headers=['Name', 'Streak', 'Start' 'End'], tablefmt='github'))
 
     # Engagement - ratio of reacts received per message sent
+    # Set default reacts_by_receiver to 0
+    for name in messenger_data.message_log['sender']:
+        if name not in reacts_by_receiver:
+            reacts_by_receiver[name] = 0
+
     line_break(report)
     report.append("Engagement - how many reacts per post")
     log_per_person['reacts_received'] = reacts_by_receiver[log_per_person.index]
