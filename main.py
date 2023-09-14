@@ -8,8 +8,12 @@ from tqdm import tqdm
 import argparse
 from matplotlib import pyplot as plt
 import matplotlib
+from matplotlib.patches import FancyArrowPatch
 import numpy as np
 from tabulate import tabulate
+from collections import defaultdict
+from copy import deepcopy
+import time
 matplotlib.use('TkAgg')
 
 parser = argparse.ArgumentParser()
@@ -17,9 +21,13 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--directory', type=str, help='Directory of files to look at', required=True)
 parser.add_argument('--output_dir', type=str, default='', help='Directory to output logs to')
 
+parser.add_argument('--past_n_days', type=int, default=-1, help="Only look at messages from the past n days")
 parser.add_argument('--show_graph', action='store_true', help="Show plot of graph of messages over time")
 parser.add_argument('--graph_freq', type=str, choices=['day', 'week', 'month'], default='week',
                     help="Frequency of data for graph")
+
+parser.add_argument('--show_react_network', action='store_true', help="Show plot of reactions between people")
+
 
 reacts = {
     "laugh": "😆",
@@ -116,7 +124,7 @@ def _preparse(file):
     return out
 
 
-def get_data(files: list) -> MessengerData:
+def get_data(files: list, past_n_days = -1) -> MessengerData:
     """Given list of json files, return dict of person : num messages sent"""
 
     messenger_data = MessengerData()
@@ -126,6 +134,9 @@ def get_data(files: list) -> MessengerData:
             json_text = _preparse(infile)
             data = json.loads(json_text)
             for msg in data['messages']:
+                if past_n_days > 0 and msg['timestamp_ms'] < (time.time() - past_n_days * 24 * 60 * 60) * 1000:
+                    continue
+
                 # store message
                 messenger_data.store_message(msg)
 
@@ -186,7 +197,6 @@ def print_report(messenger_data: MessengerData, loc=None):
     )
 
 
-
     # Streaks per person
     line_break(report)
     report.append("Streaks of longest messages")
@@ -198,7 +208,7 @@ def print_report(messenger_data: MessengerData, loc=None):
 
     # Engagement - ratio of reacts received per message sent
     # Set default reacts_by_receiver to 0
-    for name in messenger_data.message_log['sender']:
+    for name in messenger_data.message_log['sender'].unique():
         if name not in reacts_by_receiver:
             reacts_by_receiver[name] = 0
 
@@ -224,19 +234,75 @@ def plot_chat_volume(messenger_data, plot_by='week'):
     msg_log = messenger_data.message_log
     width = {'day': 1, 'week': 7, 'month': 30}
 
-    if plot_by == 'day':
-        count = msg_log.groupby([msg_log.index.date]).size()
-        x = count.index
-    elif plot_by in ['week', 'month']:
+    fig, ax = plt.subplots(nrows=2)
+
+    # if plot_by == 'day':
+    #     count = msg_log.groupby([msg_log.index.date]).size()
+    #     x = count.index
+    if plot_by in ['day', 'week', 'month']:
         count = msg_log.groupby([msg_log.to_period(freq=plot_by[0]).index]).size()
         x = count.index.start_time  # x value is start date of week
     else:
         raise NotImplementedError(f"plot_by must be one of week, day, month - not '{plot_by}'")
 
-    plt.bar(x, count.values, width=width[plot_by])
-    plt.xlabel('Date')
-    plt.ylabel(f'Messages per {plot_by}')
-    plt.show()
+    ax[0].bar(x, count.values, width=width[plot_by])
+    ax[0].set_xlabel('Date')
+    ax[0].set_ylabel(f'Messages per {plot_by}')
+
+    for user in messenger_data.message_log['sender'].unique():
+        msg_log_person = msg_log[msg_log['sender'] == user]
+        if plot_by in ['day', 'week', 'month']:
+            count = msg_log_person.groupby([msg_log_person.to_period(freq=plot_by[0]).index]).size()
+            x = count.index.start_time  # x value is start date of week
+        else:
+            raise NotImplementedError(f"plot_by must be one of week, day, month - not '{plot_by}'")
+
+        ax[1].plot(x, count, label=user)
+    ax[1].legend()
+    ax[1].set_xlabel('Date')
+    ax[1].set_xlabel(f'Messagers per {plot_by}')
+
+
+def plot_react_network(messenger_data: MessengerData):
+    """Plot graph showing connectivity based on number of reacts"""
+    users = messenger_data.message_log['sender'].unique()
+    reacts_by_sender = messenger_data.react_log.groupby(['sender','receiver']).size()
+
+    vmax = max(reacts_by_sender)
+    fig, ax = plt.subplots()
+    ax.axis('off')
+    theta = np.linspace(0, 2*np.pi, len(users)+1)
+    C = lambda i, R=1: np.array((R * np.cos(theta[i]), R*np.sin(theta[i])))
+
+    seed = np.random.seed(5)
+    cols = np.random.rand(len(users), 3)
+
+    data = defaultdict(dict)
+
+    for i, name in enumerate(users):
+        circle = plt.Circle(C(i), 0.06, zorder=0, facecolor=cols[i])
+        plt.text(*C(i,R=1.2), s=name.replace(" ", "\n"), ha='center')
+
+        style = 'Simple, tail_width=1, head_width=10, head_length=10'
+        kw=dict(arrowstyle=style)
+
+        for j, other in [(j,u) for j,u in enumerate(users) if u is not name]:
+            val = reacts_by_sender.get((name, other), 0)
+            patch = FancyArrowPatch(C(i), (C(j)), alpha=val/vmax,
+                        color=cols[i], connectionstyle="arc3,rad=0.1", **kw)
+            # length_includes_head=True,
+            ax.add_patch(patch)
+            data[name][other] = val
+
+
+        ax.add_patch(circle)
+        ax.set_xlim(-1.2, 1.2)
+        ax.set_ylim(-1.2, 1.2)
+
+    #     Print as a table
+    first_name_only = lambda s: s.split()[0]
+    print(tabulate([['From ' + first_name_only(name), *[data[name].get(u,'-') for u in users]] for name in users],
+                   headers=['To ' + first_name_only(s) for s in users], tablefmt='github'))
 
 
 if __name__ == "__main__":
@@ -246,16 +312,19 @@ if __name__ == "__main__":
     # list of all valid message files
     files = [os.path.join(args.directory, f) for f in os.listdir(args.directory) if f.endswith('.json')]
     sorted(files)  # make sure in alphabetical (reverse chronological) order
-    messenger_data = get_data(files)
+    messenger_data = get_data(files, past_n_days=args.past_n_days)
 
     output_dir = args.output_dir
     if output_dir != '':
         os.makedirs(output_dir, exist_ok=True)
         messenger_data.save_all(output_dir)
 
-    print_report(messenger_data, loc=os.path.join(output_dir, 'log.txt') if output_dir!="" else None)
+    print_report(messenger_data, loc=os.path.join(output_dir, 'log.txt') if output_dir != "" else None)
 
     if args.show_graph:
         plot_chat_volume(messenger_data, plot_by=args.graph_freq)
 
+    if args.show_react_network:
+        plot_react_network(messenger_data)
 
+    plt.show()
